@@ -1,20 +1,45 @@
 name: Deploy backend to EC2
 
-# masterwill-backend-server (Amazon Linux 2023, eu-central-1) has no IAM
-# instance profile and we don't hold its SSH private key, so this deploys
-# over plain SSH using a key you add as a repo secret. One-time setup this
-# workflow expects on the server (as ec2-user):
-#   sudo mkdir -p /opt/masterwill-backend
-#   sudo touch /opt/masterwill-backend/.env   # fill in DATABASE_URL, JWT_SECRET, etc.
-#   sudo chown ec2-user:ec2-user /opt/masterwill-backend /opt/masterwill-backend/.env
-# And these repo secrets (Settings > Secrets and variables > Actions):
-#   EC2_HOST      e.g. 52.29.183.7 (or a stable DNS name for the instance)
-#   EC2_USER      ec2-user
-#   EC2_SSH_KEY   private half of the key pair this instance was launched with
+# Builds the Docker image, pushes it to Amazon ECR, then has
+# masterwill-backend-server pull and run the new image. The instance has
+# no IAM instance profile, so it can't fetch its own ECR credentials — the
+# runner gets a short-lived ECR password (aws ecr get-login-password) and
+# hands it to the server's `docker login` over SSH instead.
+#
+# One-time setup this workflow expects:
+#
+# 1. Docker installed and running on masterwill-backend-server:
+#      sudo dnf install -y docker
+#      sudo systemctl enable --now docker
+#
+# 2. /opt/masterwill-backend/.env on the server, with real values for
+#    DATABASE_URL (the masterwill-prod RDS instance), JWT_SECRET, etc.:
+#      sudo mkdir -p /opt/masterwill-backend
+#      sudo touch /opt/masterwill-backend/.env
+#    This workflow never overwrites that file, so secrets persist across
+#    deploys.
+#
+# 3. Repo secrets (Settings > Secrets and variables > Actions):
+#      AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+#        an IAM user scoped to ecr:GetAuthorizationToken (Resource: *) and
+#        ecr:BatchCheckLayerAvailability / GetDownloadUrlForLayer /
+#        BatchGetImage / PutImage / InitiateLayerUpload / UploadLayerPart /
+#        CompleteLayerUpload on
+#        arn:aws:ecr:eu-central-1:641699364994:repository/masterwill-backend
+#      EC2_HOST      e.g. 52.29.183.7 (or a stable DNS name for the instance)
+#      EC2_USER      ec2-user
+#      EC2_SSH_KEY   private half of the key pair this instance was launched with
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
+env:
+  AWS_REGION: eu-central-1
+  ECR_REPOSITORY: masterwill-backend
+
+permissions:
+  contents: read
 
 concurrency:
   group: deploy-backend
@@ -22,18 +47,34 @@ concurrency:
 
 jobs:
   deploy:
+    name: Build, push, and deploy
     runs-on: ubuntu-latest
+    environment: production
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          go-version: '1.26'
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Build linux/amd64 binary
-        run: GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o masterwill-api ./cmd/api
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" .
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Configure SSH
         run: |
@@ -42,27 +83,32 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Upload binary and service unit
+      - name: Pull and run the new image on masterwill-backend-server
+        env:
+          IMAGE: ${{ steps.build-image.outputs.image }}
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
         run: |
-          scp -i ~/.ssh/deploy_key masterwill-api deploy/masterwill-backend.service \
-            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/"
+          ECR_PASSWORD="$(aws ecr get-login-password --region "$AWS_REGION")"
 
-      - name: Install and restart
-        run: |
-          ssh -i ~/.ssh/deploy_key "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" '
-            set -euo pipefail &&
-            sudo mkdir -p /opt/masterwill-backend &&
-            sudo touch /opt/masterwill-backend/.env &&
-            sudo mv /tmp/masterwill-api /opt/masterwill-backend/masterwill-api &&
-            sudo chmod +x /opt/masterwill-backend/masterwill-api &&
-            sudo mv /tmp/masterwill-backend.service /etc/systemd/system/masterwill-backend.service &&
-            sudo systemctl daemon-reload &&
-            sudo systemctl enable masterwill-backend &&
-            sudo systemctl restart masterwill-backend &&
-            sleep 2 &&
-            sudo systemctl is-active --quiet masterwill-backend
-          '
+          cat > remote-deploy.sh <<EOF
+          #!/usr/bin/env bash
+          set -euo pipefail
+          echo "$ECR_PASSWORD" | sudo docker login --username AWS --password-stdin "$REGISTRY"
+          sudo docker pull "$IMAGE"
+          sudo docker stop masterwill-backend >/dev/null 2>&1 || true
+          sudo docker rm masterwill-backend >/dev/null 2>&1 || true
+          sudo mkdir -p /opt/masterwill-backend
+          sudo touch /opt/masterwill-backend/.env
+          sudo docker run -d --name masterwill-backend --restart unless-stopped \
+            --env-file /opt/masterwill-backend/.env -p 8080:8080 "$IMAGE"
+          sudo docker image prune -f
+          EOF
+          chmod 600 remote-deploy.sh
+
+          ssh -i ~/.ssh/deploy_key "$EC2_USER@$EC2_HOST" 'bash -s' < remote-deploy.sh
 
       - name: Clean up SSH key
         if: always()
-        run: rm -f ~/.ssh/deploy_key
+        run: rm -f ~/.ssh/deploy_key remote-deploy.sh
