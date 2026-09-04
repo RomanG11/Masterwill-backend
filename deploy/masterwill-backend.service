@@ -1,0 +1,15 @@
+[Unit]
+Description=MasterWill backend API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/masterwill-backend
+EnvironmentFile=/opt/masterwill-backend/.env
+ExecStart=/opt/masterwill-backend/masterwill-api
+Restart=on-failure
+RestartSec=2
+User=ec2-user
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,68 @@
+name: Deploy backend to EC2
+
+# masterwill-backend-server (Amazon Linux 2023, eu-central-1) has no IAM
+# instance profile and we don't hold its SSH private key, so this deploys
+# over plain SSH using a key you add as a repo secret. One-time setup this
+# workflow expects on the server (as ec2-user):
+#   sudo mkdir -p /opt/masterwill-backend
+#   sudo touch /opt/masterwill-backend/.env   # fill in DATABASE_URL, JWT_SECRET, etc.
+#   sudo chown ec2-user:ec2-user /opt/masterwill-backend /opt/masterwill-backend/.env
+# And these repo secrets (Settings > Secrets and variables > Actions):
+#   EC2_HOST      e.g. 52.29.183.7 (or a stable DNS name for the instance)
+#   EC2_USER      ec2-user
+#   EC2_SSH_KEY   private half of the key pair this instance was launched with
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Build linux/amd64 binary
+        run: GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o masterwill-api ./cmd/api
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Upload binary and service unit
+        run: |
+          scp -i ~/.ssh/deploy_key masterwill-api deploy/masterwill-backend.service \
+            "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/"
+
+      - name: Install and restart
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" '
+            set -euo pipefail &&
+            sudo mkdir -p /opt/masterwill-backend &&
+            sudo touch /opt/masterwill-backend/.env &&
+            sudo mv /tmp/masterwill-api /opt/masterwill-backend/masterwill-api &&
+            sudo chmod +x /opt/masterwill-backend/masterwill-api &&
+            sudo mv /tmp/masterwill-backend.service /etc/systemd/system/masterwill-backend.service &&
+            sudo systemctl daemon-reload &&
+            sudo systemctl enable masterwill-backend &&
+            sudo systemctl restart masterwill-backend &&
+            sleep 2 &&
+            sudo systemctl is-active --quiet masterwill-backend
+          '
+
+      - name: Clean up SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
