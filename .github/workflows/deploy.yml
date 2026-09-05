@@ -118,7 +118,7 @@ jobs:
           sudo mkdir -p /opt/masterwill-backend
           sudo touch /opt/masterwill-backend/.env
           sudo docker run -d --name masterwill-backend --restart unless-stopped \
-            --env-file /opt/masterwill-backend/.env -p 8080:8080 "$IMAGE"
+            --env-file /opt/masterwill-backend/.env -p 80:8080 "$IMAGE"
           sudo docker image prune -f
           EOF
           chmod 600 remote-deploy.sh
