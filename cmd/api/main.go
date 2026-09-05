@@ -34,7 +34,7 @@ func main() {
 	s := store.New(conn)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	if err := seed.Run(ctx, s, cfg.AdminEmail, cfg.AdminPassword); err != nil {
+	if err := seed.Run(ctx, s, cfg.AdminEmail, cfg.AdminPassword, cfg.UploadsDir); err != nil {
 		cancel()
 		log.Fatalf("seed database: %v", err)
 	}

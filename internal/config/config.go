@@ -18,6 +18,7 @@ type Config struct {
 	PaymentProvider string // "mock" or "liqpay"
 	LiqPayPublicKey  string
 	LiqPayPrivateKey string
+	UploadsDir       string // where product photos (admin-uploaded and seed) are stored, served at /uploads/
 }
 
 func Load() Config {
@@ -33,6 +34,7 @@ func Load() Config {
 		PaymentProvider:  env("PAYMENT_PROVIDER", "mock"),
 		LiqPayPublicKey:  env("LIQPAY_PUBLIC_KEY", ""),
 		LiqPayPrivateKey: env("LIQPAY_PRIVATE_KEY", ""),
+		UploadsDir:       env("UPLOADS_DIR", "uploads"),
 	}
 }
 

@@ -24,6 +24,11 @@ func NewRouter(s *store.Store, cfg config.Config, p payment.Provider) http.Handl
 
 	mux.HandleFunc("GET /api/health", a.health)
 
+	// Product photos (admin-uploaded and seed alike) — public read, no auth,
+	// same as any other static asset a storefront needs to display.
+	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(cfg.UploadsDir))))
+	mux.HandleFunc("POST /api/admin/uploads", a.requireAdmin(a.adminUploadPhoto))
+
 	// Public storefront
 	mux.HandleFunc("GET /api/categories", a.listCategories)
 	mux.HandleFunc("GET /api/products", a.listProducts)

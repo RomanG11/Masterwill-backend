@@ -17,7 +17,7 @@ type Product struct {
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
 	AgeLabel    string    `json:"ageLabel"`
-	Icon        string    `json:"icon"` // key selecting one of the frontend's illustrated icons
+	PhotoURL    string    `json:"photoUrl"` // served from /uploads/<file>, set via the admin photo upload endpoint
 	AccentColor string    `json:"accentColor"` // one of teal|pink|orange|yellow, ties to design tokens
 	PriceCents  int64     `json:"priceCents"`
 	Currency    string    `json:"currency"`

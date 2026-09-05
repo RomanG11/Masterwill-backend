@@ -19,7 +19,7 @@ type ProductFilter struct {
 
 const productSelect = `
 	SELECT p.id, p.slug, p.category_id, c.name, p.name, p.description, p.age_label,
-	       p.icon, p.accent_color, p.price_cents, p.currency, p.stock_qty, p.is_active,
+	       p.photo_url, p.accent_color, p.price_cents, p.currency, p.stock_qty, p.is_active,
 	       p.created_at, p.updated_at
 	FROM products p
 	JOIN categories c ON c.id = p.category_id
@@ -84,7 +84,7 @@ type rowScanner interface {
 func scanProduct(row rowScanner) (models.Product, error) {
 	var p models.Product
 	err := row.Scan(&p.ID, &p.Slug, &p.CategoryID, &p.Category, &p.Name, &p.Description, &p.AgeLabel,
-		&p.Icon, &p.AccentColor, &p.PriceCents, &p.Currency, &p.StockQty, &p.IsActive,
+		&p.PhotoURL, &p.AccentColor, &p.PriceCents, &p.Currency, &p.StockQty, &p.IsActive,
 		&p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return models.Product{}, mapScanErr(err, "scan product")
@@ -94,10 +94,10 @@ func scanProduct(row rowScanner) (models.Product, error) {
 
 func (s *Store) CreateProduct(ctx context.Context, p models.Product) (models.Product, error) {
 	row := s.db.QueryRowContext(ctx, `
-		INSERT INTO products (slug, category_id, name, description, age_label, icon, accent_color, price_cents, currency, stock_qty, is_active, updated_at)
+		INSERT INTO products (slug, category_id, name, description, age_label, photo_url, accent_color, price_cents, currency, stock_qty, is_active, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
 		RETURNING id`,
-		p.Slug, p.CategoryID, p.Name, p.Description, p.AgeLabel, p.Icon, p.AccentColor,
+		p.Slug, p.CategoryID, p.Name, p.Description, p.AgeLabel, p.PhotoURL, p.AccentColor,
 		p.PriceCents, p.Currency, p.StockQty, p.IsActive)
 	var id int64
 	if err := row.Scan(&id); err != nil {
@@ -109,10 +109,10 @@ func (s *Store) CreateProduct(ctx context.Context, p models.Product) (models.Pro
 func (s *Store) UpdateProduct(ctx context.Context, p models.Product) error {
 	res, err := s.db.ExecContext(ctx, `
 		UPDATE products SET slug = $1, category_id = $2, name = $3, description = $4, age_label = $5,
-			icon = $6, accent_color = $7, price_cents = $8, currency = $9, stock_qty = $10, is_active = $11,
+			photo_url = $6, accent_color = $7, price_cents = $8, currency = $9, stock_qty = $10, is_active = $11,
 			updated_at = now()
 		WHERE id = $12`,
-		p.Slug, p.CategoryID, p.Name, p.Description, p.AgeLabel, p.Icon, p.AccentColor,
+		p.Slug, p.CategoryID, p.Name, p.Description, p.AgeLabel, p.PhotoURL, p.AccentColor,
 		p.PriceCents, p.Currency, p.StockQty, p.IsActive, p.ID)
 	if err != nil {
 		return fmt.Errorf("update product: %w", err)

@@ -23,7 +23,7 @@ type productRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	AgeLabel    string `json:"ageLabel"`
-	Icon        string `json:"icon"`
+	PhotoURL    string `json:"photoUrl"`
 	AccentColor string `json:"accentColor"`
 	PriceCents  int64  `json:"priceCents"`
 	Currency    string `json:"currency"`
@@ -42,7 +42,7 @@ func (a *api) adminCreateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 	created, err := a.store.CreateProduct(r.Context(), models.Product{
 		Slug: req.Slug, CategoryID: req.CategoryID, Name: req.Name, Description: req.Description,
-		AgeLabel: req.AgeLabel, Icon: req.Icon, AccentColor: req.AccentColor,
+		AgeLabel: req.AgeLabel, PhotoURL: req.PhotoURL, AccentColor: req.AccentColor,
 		PriceCents: req.PriceCents, Currency: req.Currency, StockQty: req.StockQty, IsActive: req.IsActive,
 	})
 	if err != nil {
@@ -68,7 +68,7 @@ func (a *api) adminUpdateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 	err = a.store.UpdateProduct(r.Context(), models.Product{
 		ID: id, Slug: req.Slug, CategoryID: req.CategoryID, Name: req.Name, Description: req.Description,
-		AgeLabel: req.AgeLabel, Icon: req.Icon, AccentColor: req.AccentColor,
+		AgeLabel: req.AgeLabel, PhotoURL: req.PhotoURL, AccentColor: req.AccentColor,
 		PriceCents: req.PriceCents, Currency: req.Currency, StockQty: req.StockQty, IsActive: req.IsActive,
 	})
 	if err != nil {

@@ -1,0 +1,2 @@
+ALTER TABLE products ADD COLUMN icon TEXT NOT NULL DEFAULT 'blocks';
+ALTER TABLE products DROP COLUMN photo_url;
