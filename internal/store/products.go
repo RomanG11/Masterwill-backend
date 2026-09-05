@@ -69,7 +69,16 @@ func (s *Store) ListProducts(ctx context.Context, f ProductFilter) ([]models.Pro
 
 func (s *Store) GetProductBySlug(ctx context.Context, slug string) (models.Product, error) {
 	row := s.db.QueryRowContext(ctx, productSelect+" WHERE p.slug = $1", slug)
-	return scanProduct(row)
+	p, err := scanProduct(row)
+	if err != nil {
+		return models.Product{}, err
+	}
+	media, err := s.ListProductMedia(ctx, p.ID)
+	if err != nil {
+		return models.Product{}, err
+	}
+	p.Media = media
+	return p, nil
 }
 
 func (s *Store) GetProductByID(ctx context.Context, id int64) (models.Product, error) {

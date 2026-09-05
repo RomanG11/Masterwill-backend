@@ -25,6 +25,18 @@ type Product struct {
 	IsActive    bool      `json:"isActive"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
+	Media       []ProductMedia `json:"media,omitempty"` // extra gallery photos/videos, populated on single-product fetches
+}
+
+// ProductMedia is an extra gallery photo or video attached to a product,
+// beyond its primary PhotoURL cover image. Files live under the same
+// /uploads/ store as the cover photo.
+type ProductMedia struct {
+	ID        int64  `json:"id"`
+	ProductID int64  `json:"productId"`
+	MediaType string `json:"mediaType"` // "photo" | "video"
+	URL       string `json:"url"`
+	SortOrder int    `json:"sortOrder"`
 }
 
 type OrderStatus string

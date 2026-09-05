@@ -10,28 +10,30 @@ import (
 	"path/filepath"
 )
 
-const maxUploadBytes = 5 << 20 // 5 MiB — plenty for a product photo, small enough to not need chunking
+const maxUploadBytes = 50 << 20 // 50 MiB — covers product photos and short demo videos
 
-var allowedPhotoTypes = map[string]string{
+var allowedMediaTypes = map[string]string{
 	"image/jpeg": ".jpg",
 	"image/png":  ".png",
 	"image/webp": ".webp",
+	"video/mp4":  ".mp4",
+	"video/webm": ".webm",
 }
 
-// adminUploadPhoto stores a product photo under cfg.UploadsDir and returns
-// the public URL it's served at (see the GET /uploads/ route in router.go).
-// Validation is by sniffed content, not the client-supplied filename/header,
-// since either can lie about what the bytes actually are.
-func (a *api) adminUploadPhoto(w http.ResponseWriter, r *http.Request) {
+// adminUploadMedia stores a product photo or video under cfg.UploadsDir and
+// returns the public URL it's served at (see the GET /uploads/ route in
+// router.go). Validation is by sniffed content, not the client-supplied
+// filename/header, since either can lie about what the bytes actually are.
+func (a *api) adminUploadMedia(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes)
 	if err := r.ParseMultipartForm(maxUploadBytes); err != nil {
 		writeError(w, http.StatusBadRequest, "файл завеликий або запит невалідний")
 		return
 	}
 
-	file, _, err := r.FormFile("photo")
+	file, _, err := r.FormFile("file")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "додайте файл у полі photo")
+		writeError(w, http.StatusBadRequest, "додайте файл у полі file")
 		return
 	}
 	defer file.Close()
@@ -45,9 +47,9 @@ func (a *api) adminUploadPhoto(w http.ResponseWriter, r *http.Request) {
 	head = head[:n]
 
 	contentType := http.DetectContentType(head)
-	ext, ok := allowedPhotoTypes[contentType]
+	ext, ok := allowedMediaTypes[contentType]
 	if !ok {
-		writeError(w, http.StatusBadRequest, "дозволені тільки JPEG, PNG або WEBP")
+		writeError(w, http.StatusBadRequest, "дозволені тільки JPEG, PNG, WEBP, MP4 або WEBM")
 		return
 	}
 

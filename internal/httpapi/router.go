@@ -24,10 +24,10 @@ func NewRouter(s *store.Store, cfg config.Config, p payment.Provider) http.Handl
 
 	mux.HandleFunc("GET /api/health", a.health)
 
-	// Product photos (admin-uploaded and seed alike) — public read, no auth,
-	// same as any other static asset a storefront needs to display.
+	// Product photos/videos (admin-uploaded and seed alike) — public read, no
+	// auth, same as any other static asset a storefront needs to display.
 	mux.Handle("GET /uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir(cfg.UploadsDir))))
-	mux.HandleFunc("POST /api/admin/uploads", a.requireAdmin(a.adminUploadPhoto))
+	mux.HandleFunc("POST /api/admin/uploads", a.requireAdmin(a.adminUploadMedia))
 
 	// Public storefront
 	mux.HandleFunc("GET /api/categories", a.listCategories)
@@ -46,6 +46,9 @@ func NewRouter(s *store.Store, cfg config.Config, p payment.Provider) http.Handl
 	mux.HandleFunc("POST /api/admin/products", a.requireAdmin(a.adminCreateProduct))
 	mux.HandleFunc("PUT /api/admin/products/{id}", a.requireAdmin(a.adminUpdateProduct))
 	mux.HandleFunc("DELETE /api/admin/products/{id}", a.requireAdmin(a.adminDeleteProduct))
+	mux.HandleFunc("GET /api/admin/products/{id}/media", a.requireAdmin(a.adminListProductMedia))
+	mux.HandleFunc("POST /api/admin/products/{id}/media", a.requireAdmin(a.adminAddProductMedia))
+	mux.HandleFunc("DELETE /api/admin/products/{id}/media/{mediaId}", a.requireAdmin(a.adminDeleteProductMedia))
 
 	mux.HandleFunc("GET /api/admin/categories", a.requireAdmin(a.adminListCategories))
 	mux.HandleFunc("POST /api/admin/categories", a.requireAdmin(a.adminCreateCategory))
