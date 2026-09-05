@@ -28,7 +28,19 @@ name: Deploy backend to EC2
 #        arn:aws:ecr:eu-central-1:641699364994:repository/masterwill-backend
 #      EC2_HOST      e.g. 52.29.183.7 (or a stable DNS name for the instance)
 #      EC2_USER      ec2-user
-#      EC2_SSH_KEY   private half of the key pair this instance was launched with
+#      EC2_SSH_KEY   base64 of the private key this instance was launched with —
+#                    NOT the raw PEM text. Pasting a multi-line PEM directly into
+#                    a GitHub secret is exactly what caused the
+#                    "Load key ...: error in libcrypto" failure: GitHub (or
+#                    whatever clipboard step touched it on the way) mangled the
+#                    line breaks. Base64 collapses it to one line first, so
+#                    there's nothing left to mangle. Generate it with:
+#                      base64 -w0 path/to/MainKeyPair.pem            # Linux
+#                      base64 -i path/to/MainKeyPair.pem | tr -d '\n' # macOS
+#                    PowerShell:
+#                      [Convert]::ToBase64String([IO.File]::ReadAllBytes("MainKeyPair.pem"))
+#                    The key must have no passphrase — nothing in this
+#                    non-interactive job can supply one.
 on:
   push:
     branches: [main]
@@ -79,8 +91,12 @@ jobs:
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          printf '%s' "${{ secrets.EC2_SSH_KEY }}" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          # Fail here with a clear message instead of a confusing
+          # "Permission denied" from ssh later, if EC2_SSH_KEY wasn't
+          # actually base64 (or decoded to something that isn't a key).
+          ssh-keygen -y -f ~/.ssh/deploy_key -P '' > /dev/null
           ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
 
       - name: Pull and run the new image on masterwill-backend-server
