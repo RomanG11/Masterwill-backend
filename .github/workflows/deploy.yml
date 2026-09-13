@@ -13,11 +13,14 @@ name: Deploy backend to EC2
 #      sudo systemctl enable --now docker
 #
 # 2. /opt/masterwill-backend/.env on the server, with real values for
-#    DATABASE_URL (the masterwill-prod RDS instance), JWT_SECRET, etc.:
-#      sudo mkdir -p /opt/masterwill-backend
+#    DATABASE_URL (the masterwill-prod RDS instance), JWT_SECRET, etc.,
+#    plus an uploads/ directory for product photos — bind-mounted into the
+#    container so admin-uploaded photos survive the next deploy instead of
+#    vanishing with the old container:
+#      sudo mkdir -p /opt/masterwill-backend/uploads
 #      sudo touch /opt/masterwill-backend/.env
-#    This workflow never overwrites that file, so secrets persist across
-#    deploys.
+#    This workflow never overwrites .env or anything already in uploads/,
+#    so both persist across deploys.
 #
 # 3. Repo secrets (Settings > Secrets and variables > Actions):
 #      AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
@@ -115,10 +118,12 @@ jobs:
           sudo docker pull "$IMAGE"
           sudo docker stop masterwill-backend >/dev/null 2>&1 || true
           sudo docker rm masterwill-backend >/dev/null 2>&1 || true
-          sudo mkdir -p /opt/masterwill-backend
+          sudo mkdir -p /opt/masterwill-backend/uploads
           sudo touch /opt/masterwill-backend/.env
           sudo docker run -d --name masterwill-backend --restart unless-stopped \
-            --env-file /opt/masterwill-backend/.env -p 80:8080 "$IMAGE"
+            --env-file /opt/masterwill-backend/.env \
+            -v /opt/masterwill-backend/uploads:/app/uploads \
+            -p 80:8080 "$IMAGE"
           sudo docker image prune -f
           EOF
           chmod 600 remote-deploy.sh

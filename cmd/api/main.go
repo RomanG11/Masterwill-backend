@@ -1,4 +1,4 @@
-// Command api runs the МайстерВіль storefront + admin REST API.
+// Command api runs the Майстервіль storefront + admin REST API.
 package main
 
 import (
@@ -34,7 +34,7 @@ func main() {
 	s := store.New(conn)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	if err := seed.Run(ctx, s, cfg.AdminEmail, cfg.AdminPassword); err != nil {
+	if err := seed.Run(ctx, s, cfg.AdminEmail, cfg.AdminPassword, cfg.UploadsDir); err != nil {
 		cancel()
 		log.Fatalf("seed database: %v", err)
 	}
@@ -63,7 +63,7 @@ func main() {
 	defer stop()
 
 	go func() {
-		log.Printf("МайстерВіль API listening on http://localhost:%s", cfg.Port)
+		log.Printf("Майстервіль API listening on http://localhost:%s", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("server error: %v", err)
 		}

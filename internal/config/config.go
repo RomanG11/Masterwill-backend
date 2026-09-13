@@ -12,12 +12,13 @@ type Config struct {
 	JWTSecret      string
 	AdminEmail     string
 	AdminPassword  string
-	CORSOrigin     string
+	CORSOrigin     string // comma-separated list of allowed origins
 	PublicBaseURL  string // this API's own public URL, used for payment callback URLs
 	FrontendURL    string // where to redirect the shopper after payment
 	PaymentProvider string // "mock" or "liqpay"
 	LiqPayPublicKey  string
 	LiqPayPrivateKey string
+	UploadsDir       string // where product photos (admin-uploaded and seed) are stored, served at /uploads/
 }
 
 func Load() Config {
@@ -33,6 +34,7 @@ func Load() Config {
 		PaymentProvider:  env("PAYMENT_PROVIDER", "mock"),
 		LiqPayPublicKey:  env("LIQPAY_PUBLIC_KEY", ""),
 		LiqPayPrivateKey: env("LIQPAY_PRIVATE_KEY", ""),
+		UploadsDir:       env("UPLOADS_DIR", "uploads"),
 	}
 }
 

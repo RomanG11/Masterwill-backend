@@ -1,0 +1,2 @@
+ALTER TABLE products ADD COLUMN photo_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE products DROP COLUMN icon;

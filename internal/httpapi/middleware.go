@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"masterwill-backend/internal/auth"
@@ -13,10 +14,21 @@ type ctxKey int
 
 const adminIDKey ctxKey = iota
 
-func withCORS(origin string) func(http.Handler) http.Handler {
+// withCORS allows any origin in a comma-separated allowlist (e.g. the site
+// on both its apex and www domains). The allowed origin is echoed back
+// rather than using "*", since the admin panel sends credentials.
+func withCORS(allowedOrigins string) func(http.Handler) http.Handler {
+	origins := make(map[string]bool)
+	for _, o := range strings.Split(allowedOrigins, ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			origins[o] = true
+		}
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
+			if origin := r.Header.Get("Origin"); origins[origin] {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+			}
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 			w.Header().Set("Vary", "Origin")

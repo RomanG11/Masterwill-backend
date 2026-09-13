@@ -5,18 +5,25 @@ package seed
 
 import (
 	"context"
+	"embed"
 	"fmt"
+	"io/fs"
 	"log"
+	"os"
+	"path/filepath"
 
 	"masterwill-backend/internal/auth"
 	"masterwill-backend/internal/models"
 	"masterwill-backend/internal/store"
 )
 
+//go:embed photos/*.jpg
+var photosFS embed.FS
+
 type demoProduct struct {
-	slug, categorySlug, name, description, ageLabel, icon, accent string
-	priceCents                                                    int64
-	stock                                                          int
+	slug, categorySlug, name, description, ageLabel, photoKey, accent string
+	priceCents                                                        int64
+	stock                                                              int
 }
 
 var demoCategories = []models.Category{
@@ -28,6 +35,8 @@ var demoCategories = []models.Category{
 	{Slug: "vehicles", Name: "Транспорт", SortOrder: 6},
 }
 
+// photoKey names a file under photos/<key>.jpg, copied to the uploads dir
+// (as /uploads/<key>.jpg) the same way an admin-uploaded photo would be.
 var demoProducts = []demoProduct{
 	{"zamok-drakona", "constructors", "«Замок дракона», 240 деталей", "Конструктор для будівництва казкового замку з рухомими вежами.", "3+", "castle", "yellow", 119000, 14},
 	{"vedmedyk-topa", "plush", "Плюшевий ведмедик «Тьопа», 35 см", "М'яка іграшка з гіпоалергенного плюшу, можна прати.", "0+", "bear", "pink", 59000, 22},
@@ -39,7 +48,13 @@ var demoProducts = []demoProduct{
 
 // Run seeds categories/products on first launch and ensures the configured
 // admin account exists (creating it if the admin_users table is empty).
-func Run(ctx context.Context, s *store.Store, adminEmail, adminPassword string) error {
+// uploadsDir is where the demo product photos get copied to, so they're
+// served by the same /uploads/ route as real admin uploads.
+func Run(ctx context.Context, s *store.Store, adminEmail, adminPassword, uploadsDir string) error {
+	if err := extractSeedPhotos(uploadsDir); err != nil {
+		return err
+	}
+
 	n, err := s.CountProducts(ctx)
 	if err != nil {
 		return err
@@ -68,6 +83,33 @@ func Run(ctx context.Context, s *store.Store, adminEmail, adminPassword string) 
 	return nil
 }
 
+// extractSeedPhotos copies the embedded demo photos into uploadsDir if
+// they're not already there — cheap to re-check on every startup, and
+// keeps a redeploy from clobbering a photo an admin has since replaced.
+func extractSeedPhotos(uploadsDir string) error {
+	if err := os.MkdirAll(uploadsDir, 0o755); err != nil {
+		return fmt.Errorf("create uploads dir: %w", err)
+	}
+	entries, err := fs.ReadDir(photosFS, "photos")
+	if err != nil {
+		return fmt.Errorf("read embedded photos: %w", err)
+	}
+	for _, e := range entries {
+		dst := filepath.Join(uploadsDir, e.Name())
+		if _, err := os.Stat(dst); err == nil {
+			continue // already extracted (or an admin's own upload took this name)
+		}
+		data, err := photosFS.ReadFile("photos/" + e.Name())
+		if err != nil {
+			return fmt.Errorf("read embedded photo %s: %w", e.Name(), err)
+		}
+		if err := os.WriteFile(dst, data, 0o644); err != nil {
+			return fmt.Errorf("write seed photo %s: %w", e.Name(), err)
+		}
+	}
+	return nil
+}
+
 func seedCatalog(ctx context.Context, s *store.Store) error {
 	slugToID := map[string]int64{}
 	for _, c := range demoCategories {
@@ -89,7 +131,7 @@ func seedCatalog(ctx context.Context, s *store.Store) error {
 			Name:        p.name,
 			Description: p.description,
 			AgeLabel:    p.ageLabel,
-			Icon:        p.icon,
+			PhotoURL:    "/uploads/" + p.photoKey + ".jpg",
 			AccentColor: p.accent,
 			PriceCents:  p.priceCents,
 			Currency:    "UAH",
