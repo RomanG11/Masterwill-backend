@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -70,7 +71,11 @@ func (t *Telegram) send(ctx context.Context, text string) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("telegram api status %d", resp.StatusCode)
+		// Telegram's error body (e.g. "Forbidden: bot was kicked from the
+		// group chat") is far more useful for diagnosing this than the bare
+		// status code, so surface it instead of discarding it.
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		return fmt.Errorf("telegram api status %d: %s", resp.StatusCode, bytes.TrimSpace(respBody))
 	}
 	return nil
 }
