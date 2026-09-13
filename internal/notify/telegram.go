@@ -1,5 +1,5 @@
-// Package notify sends operational alerts to a Telegram chat — right now
-// just "a new order was placed and paid for (or is COD)". Both
+// Package notify sends operational alerts to one or more Telegram chats —
+// right now just "a new order was placed and paid for (or is COD)". Both
 // TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are optional; if either is unset,
 // Telegram is a no-op, so this never affects local dev or a deployment that
 // hasn't set up the bot yet.
@@ -22,35 +22,51 @@ import (
 
 type Telegram struct {
 	botToken string
-	chatID   string
+	chatIDs  []string
 	client   *http.Client
 }
 
-func NewTelegram(botToken, chatID string) *Telegram {
-	return &Telegram{botToken: botToken, chatID: chatID, client: &http.Client{Timeout: 10 * time.Second}}
+// NewTelegram builds a notifier that alerts every chat in chatIDs — a
+// comma-separated list (e.g. "-1001111111111,-1002222222222,834217650").
+// Blank entries (empty string, stray whitespace, a trailing comma) are
+// dropped, so a single chat ID still works exactly as before.
+func NewTelegram(botToken, chatIDs string) *Telegram {
+	var ids []string
+	for _, id := range strings.Split(chatIDs, ",") {
+		if id = strings.TrimSpace(id); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return &Telegram{botToken: botToken, chatIDs: ids, client: &http.Client{Timeout: 10 * time.Second}}
 }
 
-// NewOrder alerts the chat about a purchase — call it once an order is
-// actually a commitment to buy: immediately for cash-on-delivery, or once
-// online payment is confirmed paid. It never blocks the caller: the request
-// runs in its own goroutine with its own timeout, and a Telegram outage only
-// gets logged, never surfaced to the shopper.
+// NewOrder alerts every configured chat about a purchase — call it once an
+// order is actually a commitment to buy: immediately for cash-on-delivery,
+// or once online payment is confirmed paid. It never blocks the caller: it
+// runs in its own goroutine, sends to each chat with its own timeout, and a
+// Telegram outage (or one bad chat ID) only gets logged per-chat, never
+// surfaced to the shopper or allowed to stop the other chats from getting
+// their alert.
 func (t *Telegram) NewOrder(order models.Order) {
-	if t == nil || t.botToken == "" || t.chatID == "" {
+	if t == nil || t.botToken == "" || len(t.chatIDs) == 0 {
 		return
 	}
+	text := formatOrderMessage(order)
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := t.send(ctx, formatOrderMessage(order)); err != nil {
-			log.Printf("telegram: notify new order %d: %v", order.ID, err)
+		for _, chatID := range t.chatIDs {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			err := t.send(ctx, chatID, text)
+			cancel()
+			if err != nil {
+				log.Printf("telegram: notify new order %d (chat %s): %v", order.ID, chatID, err)
+			}
 		}
 	}()
 }
 
-func (t *Telegram) send(ctx context.Context, text string) error {
+func (t *Telegram) send(ctx context.Context, chatID, text string) error {
 	body, err := json.Marshal(map[string]any{
-		"chat_id":    t.chatID,
+		"chat_id":    chatID,
 		"text":       text,
 		"parse_mode": "HTML",
 	})

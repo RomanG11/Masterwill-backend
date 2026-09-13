@@ -20,7 +20,7 @@ type Config struct {
 	LiqPayPrivateKey string
 	UploadsDir       string // where product photos (admin-uploaded and seed) are stored, served at /uploads/
 	TelegramBotToken string // optional — new-order alerts are skipped if either this or TelegramChatID is unset
-	TelegramChatID   string
+	TelegramChatID   string // comma-separated list — every chat gets the alert
 }
 
 func Load() Config {
