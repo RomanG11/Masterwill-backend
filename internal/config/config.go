@@ -12,7 +12,7 @@ type Config struct {
 	JWTSecret      string
 	AdminEmail     string
 	AdminPassword  string
-	CORSOrigin     string
+	CORSOrigin     string // comma-separated list of allowed origins
 	PublicBaseURL  string // this API's own public URL, used for payment callback URLs
 	FrontendURL    string // where to redirect the shopper after payment
 	PaymentProvider string // "mock" or "liqpay"
