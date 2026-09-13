@@ -7,18 +7,20 @@ import (
 	"net/http"
 
 	"masterwill-backend/internal/config"
+	"masterwill-backend/internal/notify"
 	"masterwill-backend/internal/payment"
 	"masterwill-backend/internal/store"
 )
 
 type api struct {
-	store   *store.Store
-	cfg     config.Config
-	payment payment.Provider
+	store    *store.Store
+	cfg      config.Config
+	payment  payment.Provider
+	notifier *notify.Telegram
 }
 
 func NewRouter(s *store.Store, cfg config.Config, p payment.Provider) http.Handler {
-	a := &api{store: s, cfg: cfg, payment: p}
+	a := &api{store: s, cfg: cfg, payment: p, notifier: notify.NewTelegram(cfg.TelegramBotToken, cfg.TelegramChatID)}
 
 	mux := http.NewServeMux()
 

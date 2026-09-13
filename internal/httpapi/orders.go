@@ -65,6 +65,12 @@ func (a *api) createOrder(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// COD is a firm commitment to buy with nothing left to pay online, so
+	// it's a "new purchase" right away — online orders notify once payment
+	// actually succeeds (see startCheckout and liqpayCallback) instead.
+	if order.PaymentProvider == "cod" {
+		a.notifier.NewOrder(order)
+	}
 	writeJSON(w, http.StatusCreated, order)
 }
 
@@ -119,6 +125,9 @@ func (a *api) startCheckout(w http.ResponseWriter, r *http.Request) {
 			writeStoreErr(w, err)
 			return
 		}
+		order.PaymentStatus = models.PaymentStatusPaid
+		order.PaymentProvider = "mock"
+		a.notifier.NewOrder(order)
 	}
 
 	writeJSON(w, http.StatusOK, checkout)

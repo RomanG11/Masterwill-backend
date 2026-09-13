@@ -34,5 +34,10 @@ func (a *api) liqpayCallback(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
+	if paymentStatus == models.PaymentStatusPaid {
+		if order, err := a.store.GetOrder(r.Context(), orderID); err == nil {
+			a.notifier.NewOrder(order)
+		}
+	}
 	w.WriteHeader(http.StatusOK)
 }

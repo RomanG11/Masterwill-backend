@@ -19,6 +19,8 @@ type Config struct {
 	LiqPayPublicKey  string
 	LiqPayPrivateKey string
 	UploadsDir       string // where product photos (admin-uploaded and seed) are stored, served at /uploads/
+	TelegramBotToken string // optional — new-order alerts are skipped if either this or TelegramChatID is unset
+	TelegramChatID   string
 }
 
 func Load() Config {
@@ -35,6 +37,8 @@ func Load() Config {
 		LiqPayPublicKey:  env("LIQPAY_PUBLIC_KEY", ""),
 		LiqPayPrivateKey: env("LIQPAY_PRIVATE_KEY", ""),
 		UploadsDir:       env("UPLOADS_DIR", "uploads"),
+		TelegramBotToken: env("TELEGRAM_BOT_TOKEN", ""),
+		TelegramChatID:   env("TELEGRAM_CHAT_ID", ""),
 	}
 }
 
