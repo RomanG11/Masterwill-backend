@@ -22,7 +22,10 @@ type NewOrder struct {
 	City         string
 	Address      string
 	Comment      string
-	Items        []NewOrderItem
+	// PaymentMethod is "online" (default) or "cod" (pay on delivery/pickup —
+	// no payment provider checkout is started for these).
+	PaymentMethod string
+	Items         []NewOrderItem
 }
 
 func (s *Store) CreateOrder(ctx context.Context, in NewOrder) (models.Order, error) {
@@ -67,11 +70,16 @@ func (s *Store) CreateOrder(ctx context.Context, in NewOrder) (models.Order, err
 		})
 	}
 
+	paymentProvider := ""
+	if in.PaymentMethod == "cod" {
+		paymentProvider = "cod"
+	}
+
 	row := tx.QueryRowContext(ctx, `
-		INSERT INTO orders (customer_name, phone, email, city, address, comment, total_cents, currency, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+		INSERT INTO orders (customer_name, phone, email, city, address, comment, payment_provider, total_cents, currency, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
 		RETURNING id`,
-		in.CustomerName, in.Phone, in.Email, in.City, in.Address, in.Comment, total, currency)
+		in.CustomerName, in.Phone, in.Email, in.City, in.Address, in.Comment, paymentProvider, total, currency)
 	var orderID int64
 	if err := row.Scan(&orderID); err != nil {
 		return models.Order{}, fmt.Errorf("create order: %w", err)

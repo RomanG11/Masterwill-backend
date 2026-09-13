@@ -1,11 +1,13 @@
 package httpapi
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"masterwill-backend/internal/models"
+	"masterwill-backend/internal/payment"
 	"masterwill-backend/internal/store"
 )
 
@@ -15,13 +17,14 @@ type orderItemRequest struct {
 }
 
 type createOrderRequest struct {
-	CustomerName string              `json:"customerName"`
-	Phone        string              `json:"phone"`
-	Email        string              `json:"email"`
-	City         string              `json:"city"`
-	Address      string              `json:"address"`
-	Comment      string              `json:"comment"`
-	Items        []orderItemRequest  `json:"items"`
+	CustomerName  string             `json:"customerName"`
+	Phone         string             `json:"phone"`
+	Email         string             `json:"email"`
+	City          string             `json:"city"`
+	Address       string             `json:"address"`
+	Comment       string             `json:"comment"`
+	PaymentMethod string             `json:"paymentMethod"`
+	Items         []orderItemRequest `json:"items"`
 }
 
 func (a *api) createOrder(w http.ResponseWriter, r *http.Request) {
@@ -38,6 +41,10 @@ func (a *api) createOrder(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "кошик порожній")
 		return
 	}
+	if req.PaymentMethod != "" && req.PaymentMethod != "online" && req.PaymentMethod != "cod" {
+		writeError(w, http.StatusBadRequest, "невідомий спосіб оплати")
+		return
+	}
 
 	items := make([]store.NewOrderItem, 0, len(req.Items))
 	for _, it := range req.Items {
@@ -45,13 +52,14 @@ func (a *api) createOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	order, err := a.store.CreateOrder(r.Context(), store.NewOrder{
-		CustomerName: strings.TrimSpace(req.CustomerName),
-		Phone:        strings.TrimSpace(req.Phone),
-		Email:        strings.TrimSpace(req.Email),
-		City:         strings.TrimSpace(req.City),
-		Address:      strings.TrimSpace(req.Address),
-		Comment:      strings.TrimSpace(req.Comment),
-		Items:        items,
+		CustomerName:  strings.TrimSpace(req.CustomerName),
+		Phone:         strings.TrimSpace(req.Phone),
+		Email:         strings.TrimSpace(req.Email),
+		City:          strings.TrimSpace(req.City),
+		Address:       strings.TrimSpace(req.Address),
+		Comment:       strings.TrimSpace(req.Comment),
+		PaymentMethod: req.PaymentMethod,
+		Items:         items,
 	})
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -86,6 +94,17 @@ func (a *api) startCheckout(w http.ResponseWriter, r *http.Request) {
 	order, err := a.store.GetOrder(r.Context(), id)
 	if err != nil {
 		writeStoreErr(w, err)
+		return
+	}
+
+	// Cash-on-delivery orders never go through a payment provider — the
+	// frontend already knows not to call this endpoint for them, but this
+	// guards against a stale/tampered client request too.
+	if order.PaymentProvider == "cod" {
+		writeJSON(w, http.StatusOK, payment.Checkout{
+			Provider:    "cod",
+			RedirectURL: fmt.Sprintf("%s/order/%d/success", a.cfg.FrontendURL, order.ID),
+		})
 		return
 	}
 
