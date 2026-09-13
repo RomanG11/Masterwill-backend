@@ -24,11 +24,10 @@ name: Deploy backend to EC2
 #      sudo chown -R 65532:65532 /opt/masterwill-backend/uploads
 #      sudo touch /opt/masterwill-backend/.env
 #    This workflow never overwrites .env or anything already in uploads/,
-#    so both persist across deploys.
-#
-#    New-order Telegram alerts are optional — set TELEGRAM_BOT_TOKEN
-#    (from @BotFather) and TELEGRAM_CHAT_ID in .env to turn them on;
-#    leave either unset and the app just skips sending them.
+#    so both persist across deploys — except TELEGRAM_BOT_TOKEN and
+#    TELEGRAM_CHAT_ID, which this workflow itself rewrites into .env from
+#    the repo secrets of the same name on every deploy (see step 3). Don't
+#    hand-edit those two lines on the server; they'll just get overwritten.
 #
 # 3. Repo secrets (Settings > Secrets and variables > Actions):
 #      AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
@@ -52,6 +51,10 @@ name: Deploy backend to EC2
 #                      [Convert]::ToBase64String([IO.File]::ReadAllBytes("MainKeyPair.pem"))
 #                    The key must have no passphrase — nothing in this
 #                    non-interactive job can supply one.
+#      TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID   optional — new-order alerts
+#        (from @BotFather and the target chat). Leave either unset and
+#        this workflow writes an empty value, which the app treats the
+#        same as unset: alerts just don't send.
 on:
   push:
     branches: [main]
@@ -116,6 +119,8 @@ jobs:
           REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           EC2_USER: ${{ secrets.EC2_USER }}
           EC2_HOST: ${{ secrets.EC2_HOST }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           ECR_PASSWORD="$(aws ecr get-login-password --region "$AWS_REGION")"
 
@@ -129,6 +134,9 @@ jobs:
           sudo mkdir -p /opt/masterwill-backend/uploads
           sudo chown -R 65532:65532 /opt/masterwill-backend/uploads
           sudo touch /opt/masterwill-backend/.env
+          sudo sed -i '/^TELEGRAM_BOT_TOKEN=/d;/^TELEGRAM_CHAT_ID=/d' /opt/masterwill-backend/.env
+          echo "TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN" | sudo tee -a /opt/masterwill-backend/.env >/dev/null
+          echo "TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID" | sudo tee -a /opt/masterwill-backend/.env >/dev/null
           sudo docker run -d --name masterwill-backend --restart unless-stopped \
             --env-file /opt/masterwill-backend/.env \
             -v /opt/masterwill-backend/uploads:/app/uploads \
